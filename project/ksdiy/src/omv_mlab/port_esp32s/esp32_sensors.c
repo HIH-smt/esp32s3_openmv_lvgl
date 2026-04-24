@@ -305,3 +305,76 @@ void esp32_sensor_deinit(void)
 	esp_camera_deinit();
 }
 
+/* ========== 以下为动态引脚配置新增部分 ========== */
+typedef struct {
+    int pin_sioc;
+    int pin_siod;
+    int pin_xclk;
+    int pin_pclk;
+    int pin_vsync;
+    int pin_href;
+    int pin_y2;
+    int pin_y3;
+    int pin_y4;
+    int pin_y5;
+    int pin_y6;
+    int pin_y7;
+    int pin_y8;
+    int pin_y9;
+    int pin_reset;
+    int pin_pwdn;
+    int xclk_freq_hz;
+} camera_pin_config_t;
+
+int sensor_init_with_pins(const camera_pin_config_t *config)
+{
+    esp_camera_deinit();  // 先释放之前的摄像头
+
+    // 用传进来的参数覆盖 camera_config
+    if (config->pin_sioc >= 0) camera_config.pin_sscb_scl = config->pin_sioc;
+    if (config->pin_siod >= 0) camera_config.pin_sscb_sda = config->pin_siod;
+    if (config->pin_xclk >= 0) camera_config.pin_xclk = config->pin_xclk;
+    if (config->pin_pclk >= 0) camera_config.pin_pclk = config->pin_pclk;
+    if (config->pin_vsync >= 0) camera_config.pin_vsync = config->pin_vsync;
+    if (config->pin_href >= 0) camera_config.pin_href = config->pin_href;
+    if (config->pin_y2 >= 0) camera_config.pin_d0 = config->pin_y2;
+    if (config->pin_y3 >= 0) camera_config.pin_d1 = config->pin_y3;
+    if (config->pin_y4 >= 0) camera_config.pin_d2 = config->pin_y4;
+    if (config->pin_y5 >= 0) camera_config.pin_d3 = config->pin_y5;
+    if (config->pin_y6 >= 0) camera_config.pin_d4 = config->pin_y6;
+    if (config->pin_y7 >= 0) camera_config.pin_d5 = config->pin_y7;
+    if (config->pin_y8 >= 0) camera_config.pin_d6 = config->pin_y8;
+    if (config->pin_y9 >= 0) camera_config.pin_d7 = config->pin_y9;
+    if (config->pin_reset >= 0) camera_config.pin_reset = config->pin_reset;
+    if (config->pin_pwdn >= 0) camera_config.pin_pwdn = config->pin_pwdn;
+    if (config->xclk_freq_hz > 0) camera_config.xclk_freq_hz = config->xclk_freq_hz;
+
+    esp_err_t err = esp_camera_init(&camera_config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Camera Init Failed with custom pins");
+        return (int) err;
+    }
+
+    sensor_t *esp_sensor = esp_camera_sensor_get();
+    if (esp_sensor) {
+        sensor.reset = omv_reset;
+        sensor.read_reg = omv_read_reg;
+        sensor.write_reg = omv_write_reg;
+        sensor.set_pixformat = omv_set_pixformat;
+        sensor.set_framesize = omv_set_framesize;
+        sensor.set_contrast = omv_set_contrast;
+        sensor.set_brightness = omv_set_brightness;
+        sensor.set_saturation = omv_set_saturation;
+        sensor.set_gainceiling = omv_set_gainceiling;
+        sensor.set_quality = omv_set_quality;
+        sensor.set_colorbar = omv_set_colorbar;
+        sensor.set_auto_exposure = omv_set_auto_exposure;
+        sensor.set_auto_gain = omv_set_auto_gain;
+        sensor.set_auto_whitebal = omv_set_auto_whitebal;
+        sensor.set_hmirror = omv_set_hmirror;
+        sensor.set_vflip = omv_set_vflip;
+        sensor.detected = true;
+        ESP_LOGI(TAG, "Camera re-initialized with custom pins");
+    }
+    return 0;
+}
