@@ -31,6 +31,30 @@
 extern omv_sensor_t sensor;
 static mp_obj_t vsync_callback = mp_const_none;
 
+// 新增：动态引脚配置结构体，与 esp32_sensors.c 中一致
+typedef struct {
+    int pin_sioc;
+    int pin_siod;
+    int pin_xclk;
+    int pin_pclk;
+    int pin_vsync;
+    int pin_href;
+    int pin_y2;
+    int pin_y3;
+    int pin_y4;
+    int pin_y5;
+    int pin_y6;
+    int pin_y7;
+    int pin_y8;
+    int pin_y9;
+    int pin_reset;
+    int pin_pwdn;
+    int xclk_freq_hz;
+} camera_pin_config_t;
+
+// 声明 esp32_sensors.c 中的函数
+extern int sensor_init_with_pins(const camera_pin_config_t *config);
+
 #if MICROPY_PY_IMU
 static void do_auto_rotation(int pitch_deadzone, int roll_activezone)
 {
@@ -919,6 +943,68 @@ static mp_obj_t py_sensor_set_ir_led(mp_obj_t enable)
     return mp_const_none;
 }
 
+// ========== 新增动态引脚初始化函数 ==========
+#include <string.h>  // 为了 memset
+
+STATIC mp_obj_t py_sensor_init_pins(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args)
+{
+    enum { ARG_sioc, ARG_siod, ARG_xclk, ARG_pclk, ARG_vsync, ARG_href,
+           ARG_y2, ARG_y3, ARG_y4, ARG_y5, ARG_y6, ARG_y7, ARG_y8, ARG_y9,
+           ARG_reset, ARG_pwdn, ARG_xclk_freq };
+    const mp_arg_t allowed_args[] = {
+        { MP_QSTR_sioc,  MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_siod,  MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_xclk,  MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_pclk,  MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_vsync, MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_href,  MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_y2,    MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_y3,    MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_y4,    MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_y5,    MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_y6,    MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_y7,    MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_y8,    MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_y9,    MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_reset, MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_pwdn,  MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_xclk_freq, MP_ARG_INT, {.u_int = 20000000} },
+    };
+    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
+    mp_arg_parse_all_kw_array(0, n_args, pos_args, kw_args,
+                              MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+
+    camera_pin_config_t pins;
+    memset(&pins, -1, sizeof(pins));
+
+    #define ASSIGN_PIN(field, idx) if (args[idx].u_int >= 0) pins.field = args[idx].u_int
+    ASSIGN_PIN(pin_sioc,  ARG_sioc);
+    ASSIGN_PIN(pin_siod,  ARG_siod);
+    ASSIGN_PIN(pin_xclk,  ARG_xclk);
+    ASSIGN_PIN(pin_pclk,  ARG_pclk);
+    ASSIGN_PIN(pin_vsync, ARG_vsync);
+    ASSIGN_PIN(pin_href,  ARG_href);
+    ASSIGN_PIN(pin_y2,    ARG_y2);
+    ASSIGN_PIN(pin_y3,    ARG_y3);
+    ASSIGN_PIN(pin_y4,    ARG_y4);
+    ASSIGN_PIN(pin_y5,    ARG_y5);
+    ASSIGN_PIN(pin_y6,    ARG_y6);
+    ASSIGN_PIN(pin_y7,    ARG_y7);
+    ASSIGN_PIN(pin_y8,    ARG_y8);
+    ASSIGN_PIN(pin_y9,    ARG_y9);
+    ASSIGN_PIN(pin_reset, ARG_reset);
+    ASSIGN_PIN(pin_pwdn,  ARG_pwdn);
+    if (args[ARG_xclk_freq].u_int > 0) pins.xclk_freq_hz = args[ARG_xclk_freq].u_int;
+
+    int ret = sensor_init_with_pins(&pins);
+    if (ret != 0) {
+        mp_raise_msg_varg(&mp_type_RuntimeError, MP_ERROR_TEXT("Camera init failed: %d"), ret);
+    }
+    return mp_const_none;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_KW(py_sensor_init_pins_obj, 0, py_sensor_init_pins);
+
+// ========== 所有函数对象声明（原样保留） ==========
 STATIC MP_DEFINE_CONST_FUN_OBJ_0(py_sensor__init__obj,              py_sensor__init__);
 STATIC MP_DEFINE_CONST_FUN_OBJ_0(py_sensor_reset_obj,               py_sensor_reset);
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(py_sensor_sleep_obj,               py_sensor_sleep);
@@ -973,6 +1059,7 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_2(py_sensor_write_reg_obj,           py_sensor_wr
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(py_sensor_read_reg_obj,            py_sensor_read_reg);
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(py_sensor_set_ir_led_obj,          py_sensor_set_ir_led);
 
+// ========== 模块字典表（原样保留所有常数，新增条目在末尾） ==========
 STATIC const mp_map_elem_t globals_dict_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR___name__),            MP_OBJ_NEW_QSTR(MP_QSTR_sensor)},
 
@@ -1134,8 +1221,10 @@ STATIC const mp_map_elem_t globals_dict_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_get_color_palette),   (mp_obj_t)&py_sensor_get_color_palette_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR___write_reg),         (mp_obj_t)&py_sensor_write_reg_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR___read_reg),          (mp_obj_t)&py_sensor_read_reg_obj },
-
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_ir_led),          (mp_obj_t)&py_sensor_set_ir_led_obj },
+
+    // 新增动态引脚初始化函数
+    { MP_OBJ_NEW_QSTR(MP_QSTR_init_pins),            (mp_obj_t)&py_sensor_init_pins_obj },
 };
 
 STATIC MP_DEFINE_CONST_DICT(globals_dict, globals_dict_table);
